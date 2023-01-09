@@ -247,6 +247,8 @@ pub use url::Url;
 pub enum AuthType {
     /// The client_id and client_secret will be included as part of the request body.
     RequestBody,
+    /// The client_id and client_secret will be included as part of the request query parameters.
+    RequestQuery,
     /// The client_id and client_secret will be included using the basic auth authentication scheme.
     BasicAuth,
 }
@@ -729,6 +731,13 @@ impl<'a> ClientRequest<'a> {
 
                     if let Some(client_secret) = self.request.client_secret {
                         form.append_pair("client_secret", client_secret);
+                    }
+                }
+                AuthType::RequestQuery => {
+                    request = request.query(&[("client_id", self.request.client_id)]);
+
+                    if let Some(client_secret) = self.request.client_secret {
+                        request = request.query(&[("client_secret", client_secret)]);
                     }
                 }
                 AuthType::BasicAuth => {
