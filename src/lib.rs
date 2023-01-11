@@ -472,6 +472,7 @@ pub struct Client {
     auth_url: Url,
     auth_type: AuthType,
     token_url: Url,
+    refresh_url: Option<Url>,
     scopes: Vec<Scope>,
     redirect_url: Option<Url>,
 }
@@ -498,7 +499,8 @@ impl Client {
             client_secret: None,
             auth_url,
             auth_type: AuthType::BasicAuth,
-            token_url,
+            token_url: token_url,
+            refresh_url: None,
             scopes: Vec::new(),
             redirect_url: None,
         }
@@ -526,6 +528,11 @@ impl Client {
     /// Sets the the redirect URL used by the authorization endpoint.
     pub fn set_redirect_url(&mut self, redirect_url: Url) {
         self.redirect_url = Some(redirect_url);
+    }
+
+    /// Sets the the refresh URL used by the client to refresh a token.
+    pub fn set_refresh_url(&mut self, refresh_url: Url) {
+        self.refresh_url = Some(refresh_url);
     }
 
     /// Produces the full authorization URL used by the
@@ -608,7 +615,7 @@ impl Client {
     pub fn exchange_code(&self, code: impl Into<AuthorizationCode>) -> Request<'_> {
         let code = code.into();
 
-        self.request_token()
+        self.request_token(false)
             .param("grant_type", "authorization_code")
             .param("code", code.to_string())
     }
@@ -625,7 +632,7 @@ impl Client {
         let password = password.as_ref();
 
         let mut builder = self
-            .request_token()
+            .request_token(false)
             .param("grant_type", "password")
             .param("username", username.to_string())
             .param("password", password.to_string());
@@ -651,7 +658,7 @@ impl Client {
     /// See https://tools.ietf.org/html/rfc6749#section-4.4.2
     pub fn exchange_client_credentials(&self) -> Request<'_> {
         let mut builder = self
-            .request_token()
+            .request_token(false)
             .param("grant_type", "client_credentials");
 
         // Generate the space-delimited scopes String before initializing params so that it has
@@ -674,15 +681,20 @@ impl Client {
     ///
     /// See https://tools.ietf.org/html/rfc6749#section-6
     pub fn exchange_refresh_token(&self, refresh_token: &RefreshToken) -> Request<'_> {
-        self.request_token()
+        self.request_token(true)
             .param("grant_type", "refresh_token")
             .param("refresh_token", refresh_token.to_string())
     }
 
     /// Construct a request builder for the token URL.
-    fn request_token(&self) -> Request<'_> {
+    fn request_token(&self, for_refresh: bool) -> Request<'_> {
+        let token_url: &Url = match for_refresh {
+            true => self.refresh_url.as_ref().unwrap_or(&self.token_url),
+            false => &self.token_url,
+        };
+
         Request {
-            token_url: &self.token_url,
+            token_url,
             auth_type: self.auth_type,
             client_id: &self.client_id,
             client_secret: self.client_secret.as_ref(),
